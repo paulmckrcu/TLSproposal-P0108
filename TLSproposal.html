@@ -29,7 +29,32 @@ problem statement implied by that document.
 <h2>Summary of Problem Statement</h2>
 
 <p>
-TLS is a problem for same-instruction-multiple-data (SIMD) units
+We expect that lightweight executors will have problems
+with TLS as currently envisioned and implemented.
+For example, some types of executors nest hierarchically, so that
+a number of light-weight executors might run in the context of
+a single heavy-weight <tt>std::thread</tt>.
+If a given function accesses TLS, and is called both from the context
+of a <tt>std::thread</tt> and from the context of a task executing
+within an <tt>std::thread</tt>, what should its TLS accesses do?
+If the instances invoked from a task access task-level TLS data,
+the function must do different things when invoked in different contexts.
+If the <tt>std::thread</tt>-level TLS data is accesses, then the
+task-level accesses might introduce data races and thus undefined behavior.
+
+<p>
+This also can interact with signal handling.
+To see this, suppose that a signal arrives at a
+<tt>std::thread</tt> while that <tt>std::thread</tt>
+is running a light-weight executor, for example, a task.
+The signal handler will likely conceptually be part of the
+<tt>std::thread</tt> rather than the task.
+This would imply some additional context switching at signal-handler
+start and end.
+
+<p>
+TLS is most especially a problem for light-weight executors
+implementing same-instruction-multiple-data (SIMD) units
 and general-purpose graphical processing units (GPGPUs)
 because large programs can have very large amounts of TLS data,
 each item of which might have C++ constructors and destructors.
@@ -48,18 +73,16 @@ computational resources that can be applied to run constructors
 and destructors for GPGPU TLS data.
 
 <p>
-We expect that other types of executors will also have problems
-with TLS as currently envisioned and implemented.
-For example, some types of executors nest hierarchically, so that
-a number of light-weight executors might run in the context of
-a heavy-weight <tt>std::thread</tt>.
-If a given function accesses TLS, and is called both from the context
-of a <tt>std::thread</tt> and from the context of a task executing
-within an <tt>std::thread</tt>, what should its TLS accesses do?
-If the instances invoked from a task access task-level TLS data,
-the function must do different things when invoked in different contexts.
-If the <tt>std::thread</tt>-level TLS data is accesses, then the
-task-level accesses might introduce data races and thus undefined behavior.
+At the source-code level, it isn't generally knowable which executor a
+function is called from, or even if a function is called from multiple
+executors.
+It is left up to the programmer to write code which correctly
+accesses state for the executor(s) that the code will execute in.
+(In theory, we could of course use a TLS variable to record what type
+of executor was currently executing, but in practice that of course
+requires a TLS implementation that is efficient enough to be used by
+light-weight executors, and if we had that, we wouldn't be writing
+this paper.)
 
 <h2>Tentative Goals</h2>
 
@@ -101,6 +124,12 @@ For this approach, we put forward the following tentative goals:
 The next section exercises these goals by attempting to apply them
 to the TLS <tt>errno</tt> facility as used by the standard math library,
 in the hope of sparking productive discussion.
+Note that when multiple lightweight executors run concurrently in the
+context of a single <tt>std::thread</tt>, setting <tt>errno</tt>
+implicitly (and for some, surprisingly) invokes
+undefined behavior, so a fix is a matter of some importance.
+At a minimum, lightweight executors that do not support TLS need to
+state that attempts to access TLS results in undefineed behavior.
 
 <h2>The Curious Case of <tt>errno</tt> and the Standard Math Library</h2>
 
@@ -119,16 +148,33 @@ which in turn means that the math library's use of <tt>errno</tt>
 forms an excellent initial test case for changes to TLS.
 
 <p>
+This section looks at the following approaches:
+
+<ol>
+<li>	Restricting configuration.
+<li>	Adding <tt>errno</tt> parameter via function overloading.
+<li>	Adding <tt>errno</tt> to return value.
+</ol>
+
+<h3>Restricting Configuration</h3>
+
+<p>
 One approach is to require that
-<tt>math_errhandling &amp; MATH_ERREXCEPT</tt> be non-zero and that
+<tt>math_errhandling &amp; MATH_ERREXCEPT</tt> be non-zero
+(as is required for IEC 60559) and that
 <tt>math_errhandling &amp; MATH_ERRNO</tt> be zero in all cases where
 math library functions are invoked from executors that do not provide TLS.
+Note that <tt>math_errhandling</tt> is global and constant, which means
+that it cannot have different values in different contexts of the same
+execution.
 However, this approach cannot be used in conjunction with existing code
 that invokes math functions and tests <tt>errno</tt>.
 This could in turn be dealt with by forbidding use of code
 that checks for math errors using <tt>errno</tt>, but this would have
 the undesirable effect of acting as a barrier to the adoption of
 light-weight executors.
+
+<h3>Adding <tt>errno</tt> Parameter Via Function Overloading</h3>
 
 <p>
 Another approach is to use function overloading, so that an additional
@@ -251,9 +297,46 @@ A (probably partial) list of new APIs is as follows:
 
 <p>
 Note that new APIs need be provided only for those math functions that
-set errno.
+set <tt>errno</tt>.
 Note also that because C does not provide function overloading,
 different names will need to be used should C adopt similar functionality.
+
+<p>One might expect some dissatisfaction with the invention of more than
+100 new functions, especially given that a great many uses of these functions
+ignore <tt>errno</tt>.
+Although one can argue that ignoring <tt>errno</tt> is a bad idea,
+one might also expect strenuous objections to pointless modifications
+of existing errno-ignoring code.
+
+<h3>Adding <tt>errno</tt> to Function Return Value</h3>
+
+Another approach is to define an additional namespace containing
+definitions of these functions that return a tuple that includes both
+the normal return value and the <tt>errno</tt> value.
+For example:
+
+<blockquote>
+<pre>
+ 1 std::tuple&lt;T, errno_t&gt; acos(T);
+ 2 
+ 3 template&lt;typename T&gt; struct math_result {
+ 4   explicit math_result(T);
+ 5   explicit math_result(errno_t);
+ 6   T operator T() const;
+ 7 errno_t error() const;
+ 8   // Implementation-defined.
+ 9 };
+</pre>
+</blockquote>
+
+<p>
+This approach allows errno-ignoring code to run safely in light-weight
+executors, with modest changes for code that pays attention to errno.
+One way of preventing silent miscomputation by errno-ignoring code
+is to use exceptions, which this approach also supports.
+However, some might take exception to the use of exceptions, given that
+a number of current implementations of exceptions use, you guessed it,
+TLS!
 
 <h2>Summary</h2>
 
@@ -265,15 +348,29 @@ Your ideas are more than welcome!
 <p>
 Future work includes handling of
 allocators (which introduces the problem of cross-executor freeing),
-setjump/longjmp,
+setjmp/longjmp,
+locales,
+filesystems,
+signal handling,
+floating-point rounding modes (and everything else in <tt>fenv</tt>),
 and exceptions.
 The problem of nested executors that all provide TLS is also left
 unaddressed by this draft.
-
+In addition, and perhaps most important, future work includes guidelines
+and patterns to allow user code to work well with TLS in environments
+that include lightweight executors.
 
 <h2>Acknowledgements</h2>
 
 <p>
 @@@
+
+<h2>Additional Information</h2>
+
+<p>
+Floating-point state is stored on a per-thread basis, which means that
+if a light-weight executor can be preempted or migrated among
+<tt>std::thread</tt> instance, things like rounding modes and
+error/exception indications can be subject to unscheduled revision.
 
 </body></html>
