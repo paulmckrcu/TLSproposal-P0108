@@ -256,6 +256,14 @@ This document has examined some ways to permit light-weight executors
 to avoid implementing TLS.
 Your ideas are more than welcome!
 
+<p>
+Future work includes handling of
+allocators (which introduces the problem of cross-executor freeing),
+setjump/longjmp,
+and exceptions.
+The problem of nested executors that all provide TLS is also left
+unaddressed by this draft.
+
 
 <h2>Acknowledgements</h2>
 
