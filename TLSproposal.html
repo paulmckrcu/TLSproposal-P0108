@@ -249,6 +249,12 @@ A (probably partial) list of new APIs is as follows:
 <li>	<tt>long double fmal(long double x, long double y, long double zint *errnm);</tt>
 </ul>
 
+<p>
+Note that new APIs need be provided only for those math functions that
+set errno.
+Note also that because C does not provide function overloading,
+different names will need to be used should C adopt similar functionality.
+
 <h2>Summary</h2>
 
 <p>
