@@ -9,7 +9,7 @@
 <h1>Skeleton Proposal for Thread-Local Storage (TLS)</h1>
 
 <p>
-ISO/IEC JTC1 SC22 WG21 P0108R0 - 2015-09-24
+ISO/IEC JTC1 SC22 WG21 D0108R0 (revised) - 2015-09-25
 </p>
 
 <p>
@@ -338,6 +338,45 @@ However, some might take exception to the use of exceptions, given that
 a number of current implementations of exceptions use, you guessed it,
 TLS!
 
+<h3>Machine Registers: The Ultimate TLS Implementation</h3>
+
+<p>
+The logically extreme TLS implementation is a reserved machine register,
+so extreme <tt>errno</tt> would simply reserve a register for errno.
+If common code was to be invoked from both light-weight and heavy-weight
+executors, a simple solution is to always reserve a register for
+<tt>errno</tt>.
+
+<p>
+Of course, this approach simply does not scale with increasing numbers
+of TLS objects, as even modern machines
+have a rather limited number of registers.
+In addition, some TLS constructors might not react well to finding that
+all of their data was in machine registers, especially those constructors
+expecting to create linked structures.
+Neverthless, this approach might work well for restricted quantities of
+TLS data, such as that which might be needed for a non-hosted small-library
+implementation.
+
+<h3>Applying Lessons from Class Hierarchies</h3>
+
+<p>
+Suppose that we (very loosely) modeled TLS data with a class-like
+hierarchy.
+The &ldquo;base class&rdquo; would contain only that TLS data required by the
+core language, and &ldquo;subclasses&rdquo; would add TLS data required by
+libraries and by the user application.
+Ignoring the analogies with abstract classes for the moment, light-weight
+executors might confine themselves to TLS data relatively high up in
+this TLS hierarchy, while heavy-weight executors might take the entire
+class hierarchy, lock, stock, and barrel.
+
+<p>
+Any executor expecting to use the math library would need to maintain
+that part of the TLS hierarchy containing <tt>errno</tt>.
+Future work might identify a minimum subset for various types of
+executors.
+
 <h2>Summary</h2>
 
 <p>
@@ -353,7 +392,8 @@ locales,
 filesystems,
 signal handling,
 floating-point rounding modes (and everything else in <tt>fenv</tt>),
-and exceptions.
+exceptions,
+and alternate-stack pointers.
 The problem of nested executors that all provide TLS is also left
 unaddressed by this draft.
 In addition, and perhaps most important, future work includes guidelines
