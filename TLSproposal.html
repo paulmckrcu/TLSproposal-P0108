@@ -9,7 +9,7 @@
 <h1>Skeleton Proposal for Thread-Local Storage (TLS)</h1>
 
 <p>
-ISO/IEC JTC1 SC22 WG21 D0108R0 (revised) - 2015-09-25
+ISO/IEC JTC1 SC22 WG21 D0108R1 - 2015-10-22
 </p>
 
 <p>
@@ -21,7 +21,9 @@ TBD
 <h2>Introduction</h2>
 
 <p>
-This document in a follow-on to
+This document is a revision of P0108R0 @@@ URL @@@ based on discussions
+in the SG1 study group in October 2015 in Kona.
+P0108R0 was in turn a follow-on to
 <a href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2015/n4376.html">N4376</a>,
 and provides an initial description of a potential solution to the TLS
 problem statement implied by that document.
@@ -61,6 +63,9 @@ each item of which might have C++ constructors and destructors.
 Spending many milliseconds to run constructors and destructors
 for a SIMD computation that only takes a few microseconds to run
 is clearly not a reasonably way to achieve high performance.
+The use of lazy construction reduces this overhead, but the
+occasional &ldquo;vacation&rdquo; taken from processing to
+run some constructor might be quite unwelcome.
 
 <p>
 GPGPU code often has longer runtimes, but they also tend to run
@@ -154,6 +159,8 @@ This section looks at the following approaches:
 <li>	Restricting configuration.
 <li>	Adding <tt>errno</tt> parameter via function overloading.
 <li>	Adding <tt>errno</tt> to return value.
+<li>	Limit TLS via a class-hierarchy-like approach.
+<li>	Use IEEE NaNs or other machine state to record errors.
 </ol>
 
 <h3>Restricting Configuration</h3>
@@ -200,99 +207,99 @@ A (probably partial) list of new APIs is as follows:
 <li>	<tt>double atan2(double y, double x, int *errnm);</tt>
 <li>	<tt>float atan2f(float y, float x, int *errnm);</tt>
 <li>	<tt>long double atan2l(long double y, long double x, int *errnm);</tt>
-<li>	<tt>double acosh(double xint *errnm);</tt>
-<li>	<tt>float acoshf(float xint *errnm);</tt>
-<li>	<tt>long double acoshl(long double xint *errnm);</tt>
-<li>	<tt>double atanh(double xint *errnm);</tt>
-<li>	<tt>float atanhf(float xint *errnm);</tt>
-<li>	<tt>long double atanhl(long double xint *errnm);</tt>
-<li>	<tt>double cosh(double xint *errnm);</tt>
-<li>	<tt>float coshf(float xint *errnm);</tt>
-<li>	<tt>long double coshl(long double xint *errnm);</tt>
-<li>	<tt>double sinh(double xint *errnm);</tt>
-<li>	<tt>float sinhf(float xint *errnm);</tt>
-<li>	<tt>long double sinhl(long double xint *errnm);</tt>
-<li>	<tt>double exp(double xint *errnm);</tt>
-<li>	<tt>float expf(float xint *errnm);</tt>
-<li>	<tt>long double expl(long double xint *errnm);</tt>
-<li>	<tt>double exp2(double xint *errnm);</tt>
-<li>	<tt>float exp2f(float xint *errnm);</tt>
-<li>	<tt>long double exp2l(long double xint *errnm);</tt>
-<li>	<tt>double expm1(double xint *errnm);</tt>
-<li>	<tt>float expm1f(float xint *errnm);</tt>
-<li>	<tt>long double expm1l(long double xint *errnm);</tt>
-<li>	<tt>int ilogb(double xint *errnm);</tt>
-<li>	<tt>int ilogbf(float xint *errnm);</tt>
-<li>	<tt>int ilogbl(long double xint *errnm);</tt>
-<li>	<tt>double log(double xint *errnm);</tt>
-<li>	<tt>float logf(float xint *errnm);</tt>
-<li>	<tt>long double logl(long double xint *errnm);</tt>
-<li>	<tt>double log10(double xint *errnm);</tt>
-<li>	<tt>float log10f(float xint *errnm);</tt>
-<li>	<tt>long double log10l(long double xint *errnm);</tt>
-<li>	<tt>double log1p(double xint *errnm);</tt>
-<li>	<tt>float log1pf(float xint *errnm);</tt>
-<li>	<tt>long double log1pl(long double xint *errnm);</tt>
-<li>	<tt>double log2(double xint *errnm);</tt>
-<li>	<tt>float log2f(float xint *errnm);</tt>
-<li>	<tt>long double log2l(long double xint *errnm);</tt>
-<li>	<tt>double logb(double xint *errnm);</tt>
-<li>	<tt>float logbf(float xint *errnm);</tt>
-<li>	<tt>long double logbl(long double xint *errnm);</tt>
-<li>	<tt>double scalbn(double x, int nint *errnm);</tt>
-<li>	<tt>float scalbnf(float x, int nint *errnm);</tt>
-<li>	<tt>long double scalbnl(long double x, int nint *errnm);</tt>
-<li>	<tt>double scalbln(double x, long int nint *errnm);</tt>
-<li>	<tt>float scalblnf(float x, long int nint *errnm);</tt>
-<li>	<tt>long double scalblnl(long double x, long int nint *errnm);</tt>
-<li>	<tt>double hypot(double x, double yint *errnm);</tt>
-<li>	<tt>float hypotf(float x, float yint *errnm);</tt>
-<li>	<tt>long double hypotl(long double x, long double yint *errnm);</tt>
-<li>	<tt>double pow(double x, double yint *errnm);</tt>
-<li>	<tt>float powf(float x, float yint *errnm);</tt>
-<li>	<tt>long double powl(long double x, long double yint *errnm);</tt>
-<li>	<tt>double sqrt(double xint *errnm);</tt>
-<li>	<tt>float sqrtf(float xint *errnm);</tt>
-<li>	<tt>long double sqrtl(long double xint *errnm);</tt>
-<li>	<tt>double erfc(double xint *errnm);</tt>
-<li>	<tt>float erfcf(float xint *errnm);</tt>
-<li>	<tt>long double erfcl(long double xint *errnm);</tt>
-<li>	<tt>double lgamma(double xint *errnm);</tt>
-<li>	<tt>float lgammaf(float xint *errnm);</tt>
-<li>	<tt>long double lgammal(long double xint *errnm);</tt>
-<li>	<tt>double tgamma(double xint *errnm);</tt>
-<li>	<tt>float tgammaf(float xint *errnm);</tt>
-<li>	<tt>long double tgammal(long double xint *errnm);</tt>
-<li>	<tt>long int lrint(double xint *errnm);</tt>
-<li>	<tt>long int lrintf(float xint *errnm);</tt>
-<li>	<tt>long int lrintl(long double xint *errnm);</tt>
-<li>	<tt>long long int llrint(double xint *errnm);</tt>
-<li>	<tt>long long int llrintf(float xint *errnm);</tt>
-<li>	<tt>long long int llrintl(long double xint *errnm);</tt>
-<li>	<tt>long int lround(double xint *errnm);</tt>
-<li>	<tt>long int lroundf(float xint *errnm);</tt>
-<li>	<tt>long int lroundl(long double xint *errnm);</tt>
-<li>	<tt>long long int llround(double xint *errnm);</tt>
-<li>	<tt>long long int llroundf(float xint *errnm);</tt>
-<li>	<tt>long long int llroundl(long double xint *errnm);</tt>
-<li>	<tt>double fmod(double x, double yint *errnm);</tt>
-<li>	<tt>float fmodf(float x, float yint *errnm);</tt>
-<li>	<tt>long double fmodl(long double x, long double yint *errnm);</tt>
-<li>	<tt>double remainder(double x, double yint *errnm);</tt>
-<li>	<tt>float remainderf(float x, float yint *errnm);</tt>
-<li>	<tt>long double remainderl(long double x, long double yint *errnm);</tt>
-<li>	<tt>double remquo(double x, double y, int *quoint *errnm);</tt>
-<li>	<tt>float remquof(float x, float y, int *quoint *errnm);</tt>
-<li>	<tt>long double remquol(long double x, long double y, int *quoint *errnm);</tt>
-<li>	<tt>double nextafter(double x, double yint *errnm);</tt>
-<li>	<tt>float nextafterf(float x, float yint *errnm);</tt>
-<li>	<tt>long double nextafterl(long double x, long double yint *errnm);</tt>
-<li>	<tt>double fdim(double x, double yint *errnm);</tt>
-<li>	<tt>float fdimf(float x, float yint *errnm);</tt>
-<li>	<tt>long double fdiml(long double x, long double yint *errnm);</tt>
-<li>	<tt>double fma(double x, double y, double zint *errnm);</tt>
-<li>	<tt>float fmaf(float x, float y, float zint *errnm);</tt>
-<li>	<tt>long double fmal(long double x, long double y, long double zint *errnm);</tt>
+<li>	<tt>double acosh(double x, int *errnm);</tt>
+<li>	<tt>float acoshf(float x, int *errnm);</tt>
+<li>	<tt>long double acoshl(long double x, int *errnm);</tt>
+<li>	<tt>double atanh(double x, int *errnm);</tt>
+<li>	<tt>float atanhf(float x, int *errnm);</tt>
+<li>	<tt>long double atanhl(long double x, int *errnm);</tt>
+<li>	<tt>double cosh(double x, int *errnm);</tt>
+<li>	<tt>float coshf(float x, int *errnm);</tt>
+<li>	<tt>long double coshl(long double x, int *errnm);</tt>
+<li>	<tt>double sinh(double x, int *errnm);</tt>
+<li>	<tt>float sinhf(float x, int *errnm);</tt>
+<li>	<tt>long double sinhl(long double x, int *errnm);</tt>
+<li>	<tt>double exp(double x, int *errnm);</tt>
+<li>	<tt>float expf(float x, int *errnm);</tt>
+<li>	<tt>long double expl(long double x, int *errnm);</tt>
+<li>	<tt>double exp2(double x, int *errnm);</tt>
+<li>	<tt>float exp2f(float x, int *errnm);</tt>
+<li>	<tt>long double exp2l(long double x, int *errnm);</tt>
+<li>	<tt>double expm1(double x, int *errnm);</tt>
+<li>	<tt>float expm1f(float x, int *errnm);</tt>
+<li>	<tt>long double expm1l(long double x, int *errnm);</tt>
+<li>	<tt>int ilogb(double x, int *errnm);</tt>
+<li>	<tt>int ilogbf(float x, int *errnm);</tt>
+<li>	<tt>int ilogbl(long double x, int *errnm);</tt>
+<li>	<tt>double log(double x, int *errnm);</tt>
+<li>	<tt>float logf(float x, int *errnm);</tt>
+<li>	<tt>long double logl(long double x, int *errnm);</tt>
+<li>	<tt>double log10(double x, int *errnm);</tt>
+<li>	<tt>float log10f(float x, int *errnm);</tt>
+<li>	<tt>long double log10l(long double x, int *errnm);</tt>
+<li>	<tt>double log1p(double x, int *errnm);</tt>
+<li>	<tt>float log1pf(float x, int *errnm);</tt>
+<li>	<tt>long double log1pl(long double x, int *errnm);</tt>
+<li>	<tt>double log2(double x, int *errnm);</tt>
+<li>	<tt>float log2f(float x, int *errnm);</tt>
+<li>	<tt>long double log2l(long double x, int *errnm);</tt>
+<li>	<tt>double logb(double x, int *errnm);</tt>
+<li>	<tt>float logbf(float x, int *errnm);</tt>
+<li>	<tt>long double logbl(long double x, int *errnm);</tt>
+<li>	<tt>double scalbn(double x, int n, int *errnm);</tt>
+<li>	<tt>float scalbnf(float x, int n, int *errnm);</tt>
+<li>	<tt>long double scalbnl(long double x, int n, int *errnm);</tt>
+<li>	<tt>double scalbln(double x, long int n, int *errnm);</tt>
+<li>	<tt>float scalblnf(float x, long int n, int *errnm);</tt>
+<li>	<tt>long double scalblnl(long double x, long int n, int *errnm);</tt>
+<li>	<tt>double hypot(double x, double y, int *errnm);</tt>
+<li>	<tt>float hypotf(float x, float y, int *errnm);</tt>
+<li>	<tt>long double hypotl(long double x, long double y, int *errnm);</tt>
+<li>	<tt>double pow(double x, double y, int *errnm);</tt>
+<li>	<tt>float powf(float x, float y, int *errnm);</tt>
+<li>	<tt>long double powl(long double x, long double y, int *errnm);</tt>
+<li>	<tt>double sqrt(double x, int *errnm);</tt>
+<li>	<tt>float sqrtf(float x, int *errnm);</tt>
+<li>	<tt>long double sqrtl(long double x, int *errnm);</tt>
+<li>	<tt>double erfc(double x, int *errnm);</tt>
+<li>	<tt>float erfcf(float x, int *errnm);</tt>
+<li>	<tt>long double erfcl(long double x, int *errnm);</tt>
+<li>	<tt>double lgamma(double x, int *errnm);</tt>
+<li>	<tt>float lgammaf(float x, int *errnm);</tt>
+<li>	<tt>long double lgammal(long double x, int *errnm);</tt>
+<li>	<tt>double tgamma(double x, int *errnm);</tt>
+<li>	<tt>float tgammaf(float x, int *errnm);</tt>
+<li>	<tt>long double tgammal(long double x, int *errnm);</tt>
+<li>	<tt>long int lrint(double x, int *errnm);</tt>
+<li>	<tt>long int lrintf(float x, int *errnm);</tt>
+<li>	<tt>long int lrintl(long double x, int *errnm);</tt>
+<li>	<tt>long long int llrint(double x, int *errnm);</tt>
+<li>	<tt>long long int llrintf(float x, int *errnm);</tt>
+<li>	<tt>long long int llrintl(long double x, int *errnm);</tt>
+<li>	<tt>long int lround(double x, int *errnm);</tt>
+<li>	<tt>long int lroundf(float x, int *errnm);</tt>
+<li>	<tt>long int lroundl(long double x, int *errnm);</tt>
+<li>	<tt>long long int llround(double x, int *errnm);</tt>
+<li>	<tt>long long int llroundf(float x, int *errnm);</tt>
+<li>	<tt>long long int llroundl(long double x, int *errnm);</tt>
+<li>	<tt>double fmod(double x, double y, int *errnm);</tt>
+<li>	<tt>float fmodf(float x, float y, int *errnm);</tt>
+<li>	<tt>long double fmodl(long double x, long double y, int *errnm);</tt>
+<li>	<tt>double remainder(double x, double y, int *errnm);</tt>
+<li>	<tt>float remainderf(float x, float y, int *errnm);</tt>
+<li>	<tt>long double remainderl(long double x, long double y, int *errnm);</tt>
+<li>	<tt>double remquo(double x, double y, int *quo, int *errnm);</tt>
+<li>	<tt>float remquof(float x, float y, int *quo, int *errnm);</tt>
+<li>	<tt>long double remquol(long double x, long double y, int *quo, int *errnm);</tt>
+<li>	<tt>double nextafter(double x, double y, int *errnm);</tt>
+<li>	<tt>float nextafterf(float x, float y, int *errnm);</tt>
+<li>	<tt>long double nextafterl(long double x, long double y, int *errnm);</tt>
+<li>	<tt>double fdim(double x, double y, int *errnm);</tt>
+<li>	<tt>float fdimf(float x, float y, int *errnm);</tt>
+<li>	<tt>long double fdiml(long double x, long double y, int *errnm);</tt>
+<li>	<tt>double fma(double x, double y, double z, int *errnm);</tt>
+<li>	<tt>float fmaf(float x, float y, float z, int *errnm);</tt>
+<li>	<tt>long double fmal(long double x, long double y, long double z, int *errnm);</tt>
 </ul>
 
 <p>
@@ -376,6 +383,37 @@ Any executor expecting to use the math library would need to maintain
 that part of the TLS hierarchy containing <tt>errno</tt>.
 Future work might identify a minimum subset for various types of
 executors.
+
+<h3>Use Hardware State (NaNs) to Record Errors</h3>
+
+<p>
+IEEE floating-point not-a-number (NaN) values were designed to
+record error conditions and to flow them through the remainder of the
+computation.
+Non-IEEE hardware often has other facilities for this purpose,
+and some IEEE hardware has cheaper ways to maintain this information.
+
+<p>
+The key point here is to provide an API to read this information out.
+The API must take a floating-point number as input for the NaN case,
+however, implementations that do not use NaNs are free to ignore
+this number and instead read out hardware state.
+The return value is an integer errno.
+
+<blockquote>
+<pre>
+int recent_fp_errno(float x);
+int recent_dp_errno(double x);
+int recent_ldp_errno(long double x);
+</pre>
+</blockquote>
+
+<p>
+This approach only applies to functions that return a floating-point
+number.
+Functions that return integral types (integer log functions and
+round-to-integer functions) must continue to set errno in those
+implementations supporting errno.
 
 <h2>Summary</h2>
 
