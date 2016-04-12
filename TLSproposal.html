@@ -187,7 +187,7 @@ light-weight executors.
 Another approach is to use function overloading, so that an additional
 <tt>double sqrt(double, int *)</tt> declaration could be used in
 light-weight executors.
-Note that in some implemnetations this could require modifying the
+Note that in some implementations this could require modifying the
 underlying C library in order to bypass <tt>errno</tt> setting.
 Code invoked both from light-weight and heavy-weight executors would
 need to use the new delaration, but code invoked only from
@@ -313,33 +313,81 @@ different names will need to be used should C adopt similar functionality.
 ignore <tt>errno</tt>.
 Although one can argue that ignoring <tt>errno</tt> is a bad idea,
 one might also expect strenuous objections to pointless modifications
-of existing errno-ignoring code.
+of existing <tt>errno</tt>-ignoring code.
 
 <h3>Adding <tt>errno</tt> to Function Return Value</h3>
 
-Another approach is to define an additional namespace containing
-definitions of these functions that return a tuple that includes both
-the normal return value and the <tt>errno</tt> value.
-For example:
+<p>
+Another approach is to provide alternative wrappers for the functions
+in a new namespace, so that <tt>errno</tt>-oblivious code could simply
+assign the return value to a variable, relying on user-defined conversions
+to take up the slack.
+The following fanciful code wrappers the functions defined earlier that
+take an additional pointer value for errno, and captures both the return
+value and the errno into the <tt>struct math_result</tt>.
 
 <blockquote>
 <pre>
- 1 std::tuple&lt;T, errno_t&gt; acos(T);
- 2 
- 3 template&lt;typename T&gt; struct math_result {
- 4   explicit math_result(T);
- 5   explicit math_result(errno_t);
- 6   T operator T() const;
- 7 errno_t error() const;
- 8   // Implementation-defined.
- 9 };
+ 1 template&lt;typename T&gt; struct math_result {
+ 2   errno_t e;
+ 3   T val;
+ 4   operator errno_t() const { return e; }
+ 5   operator T() const { return val; }
+ 6 };
+ 7
+ 8 namespace no_errno {
+ 9   struct math_result&lt;float&gt; tgammaf(float x)
+10   {
+11     math_result&lt;float&gt; ret;
+12
+13     ret.val = tgammaf(x, &amp;ret.e);
+14     return ret;
+15   }
+16
+17   struct math_result&lt;double&gt; tgamma(double x)
+18   {
+19     math_result&lt;double&gt; ret;
+20
+21     ret.val = tgamma(x, &amp;ret.e);
+22     return ret;
+23   }
+24
+25   struct math_result&lt;long double&gt; lgammal(long double x)
+26   {
+27     math_result&lt;long double&gt; ret;
+28
+29     ret.val = lgammal(x, &amp;ret.e);
+30     return ret;
+31   }
+32
+33   struct math_result&lt;long int&gt; lrintl(long double x)
+34   {
+35     math_result&lt;long int&gt; ret;
+36
+37     ret.val = lrintl(x, &amp;ret.e);
+38     return ret;
+39   }
+40
+41   struct math_result&lt;long long int&gt; llrint(double x)
+42   {
+43     math_result&lt;long long int&gt; ret;
+44
+45     ret.val = llrint(x, &amp;ret.e);
+46     return ret;
+47   }
+48 }
 </pre>
 </blockquote>
 
 <p>
-This approach allows errno-ignoring code to run safely in light-weight
-executors, with modest changes for code that pays attention to errno.
-One way of preventing silent miscomputation by errno-ignoring code
+Code sensitive to errno could assign the return value to a
+<tt>struct math_result</tt> and then extract both the errno and
+the return value.
+
+<p>
+This approach allows <tt>errno</tt>-ignoring code to run safely in light-weight
+executors, with modest changes for code that pays attention to <tt>errno</tt>.
+One way of preventing silent miscomputation by <tt>errno</tt>-ignoring code
 is to use exceptions, which this approach also supports.
 However, some might take exception to the use of exceptions, given that
 a number of current implementations of exceptions use, you guessed it,
@@ -349,7 +397,7 @@ TLS!
 
 <p>
 The logically extreme TLS implementation is a reserved machine register,
-so extreme <tt>errno</tt> would simply reserve a register for errno.
+so extreme <tt>errno</tt> would simply reserve a register for <tt>errno</tt>.
 If common code was to be invoked from both light-weight and heavy-weight
 executors, a simple solution is to always reserve a register for
 <tt>errno</tt>.
@@ -398,13 +446,19 @@ The key point here is to provide an API to read this information out.
 The API must take a floating-point number as input for the NaN case,
 however, implementations that do not use NaNs are free to ignore
 this number and instead read out hardware state.
-The return value is an integer errno.
+The return value is an integer <tt>errno</tt>.
 
 <blockquote>
 <pre>
-int recent_fp_errno(float x);
-int recent_dp_errno(double x);
-int recent_ldp_errno(long double x);
+ 1 int recent_errno(float x);
+ 2 int recent_errno(double x);
+ 3 int recent_errno(long double x);
+ 4
+ 5 extern "C" {
+ 6   int recent_fp_errno(float x);
+ 7   int recent_dp_errno(double x);
+ 8   int recent_ldp_errno(long double x);
+ 9 }
 </pre>
 </blockquote>
 
@@ -412,8 +466,8 @@ int recent_ldp_errno(long double x);
 This approach only applies to functions that return a floating-point
 number.
 Functions that return integral types (integer log functions and
-round-to-integer functions) must continue to set errno in those
-implementations supporting errno.
+round-to-integer functions) must use some other alternative to stop
+using <tt>errno</tt>.
 
 <h2>Summary</h2>
 
