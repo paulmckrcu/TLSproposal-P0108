@@ -96,10 +96,14 @@ this paper.)
 <p>
 There are a number of possible ways of resolving this issue, as discussed in
 <a href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2015/n4376.html">N4376</a>,
-however, this paper focuses on the possibility that TLS is an optional
-component of an executor.
-With this approach, <tt>std::thread</tt> implements TLS, but lighter-weight
-executors might choose not to.
+however, this paper focuses on the possibility that TLS is an optional component
+of an executor.  With this approach, <tt>std::thread</tt> implements TLS, but
+lighter-weight executors might choose not to.
+
+At a minimum developers intending to target lighter-weight executors may choose
+to author code which doesn't use TLS, thereby avoiding performance pitfalls or
+lack of support on those executors. The current Standard Library unfortunately
+implicitly uses TLS in a variety of places, making TLS avoidance difficult.
 
 <p>
 For this approach, we put forward the following tentative goals:
@@ -108,11 +112,11 @@ For this approach, we put forward the following tentative goals:
 <li>	Make TLS availability optional for light-weight executors,
 	as noted above.
 	<ol>
-	<li>	Modify the standard library so as to minimize the
-		number of standard library functions that are
-		prohibited from within TLS-free executors.
-	<li>	Maintain the performance and scalability of high-quality
-		standard-library implementations.
+	<li> Provide new Standard Library functionality which avoids using TLS.
+	<li> Offer a clear migration path from older versions of these library
+	APIs.
+	<li> Maintain the performance and scalability of high-quality
+	standard-library implementations.
 	</ol>
 <li>	Avoid source-code changes for existing code running in
 	existing executors (such as <tt>std::thread</tt>) that
@@ -120,9 +124,6 @@ For this approach, we put forward the following tentative goals:
 <li>	Avoid the need to recompile existing code running in
 	existing executors (such as <tt>std::thread</tt>) that
 	provide TLS.
-<li>	Avoid API changes in the standard library.
-	(C++ only, as it seems quite unlikely that this goal can be
-	achieved in C.)
 <li>	Recruit sanitizer developers to help identify issues in
 	new code and in standard-library code related to this change.
 </ol>
@@ -136,40 +137,45 @@ context of a single <tt>std::thread</tt>, setting <tt>errno</tt>
 implicitly (and for some, surprisingly) invokes
 undefined behavior, so a fix is a matter of some importance.
 At a minimum, lightweight executors that do not support TLS need to
-state that attempts to access TLS results in undefineed behavior.
+state that attempts to access TLS results in undefined behavior.
 
 <h2>The Curious Case of <tt>errno</tt> and the Standard Math Library</h2>
 
 <p>
-C++ provides a per-<tt>std::thread</tt> facility named
-<tt>errno</tt> (19.4) in order to provide POSIX compatibility.
-This is also required to allow C++'s standard math library (26)
-maintain compatibility with that of C.
-Section 7.12 of the C standard specifies that if
-<tt>math_errhandling &amp; MATH_ERRNO</tt> is non-zero, indication of
-certain errors are available via <tt>errno</tt>.
-Furthermore, Section 19.4 of the C++ standard specifies that
-<tt>errno</tt> is provided on a per-thread basis.
-Therefore, <tt>errno</tt> is frequently implemented using TLS,
-which in turn means that the math library's use of <tt>errno</tt>
-forms an excellent initial test case for changes to TLS.
+C++ provides a per-<tt>std::thread</tt> facility named <tt>errno</tt> (19.4) in
+order to provide POSIX compatibility.  This is also required to allow C++'s
+standard math library (26) maintain compatibility with that of C.  Section 7.12
+of the C standard specifies that <tt>math_errhandling &amp; MATH_ERRNO</tt>
+being non-zero indicates that certain errors are available via <tt>errno</tt>.
+Furthermore, Section 19.4 of the C++ standard specifies that <tt>errno</tt> is
+provided on a per-thread basis.  Therefore, <tt>errno</tt> is frequently
+implemented using TLS, which in turn means that the math library's use
+of <tt>errno</tt> forms an excellent initial test case for changes to TLS.
 
 <h3>Preferred Approach: <tt>status_value</tt></h3>
 
 <p>
-The preferred approach is to provide alternative wrappers for the functions
-in a new namespace, so that <tt>errno</tt>-oblivious code could simply
-assign the return value to a variable, relying on user-defined conversions
-to take up the slack.
-The hope is that
-<a href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/p0262r0.html"><tt>status_value</tt></a>
-can be extended with an implicit conversion to return its <tt>Value</tt>,
-and that the alternative wrappers can then return a <tt>status_value</tt>.
+The preferred approach is to provide alternative wrappers for the functions in a
+new namespace, so that <tt>errno</tt>-oblivious code could simply assign the
+return value to a variable, relying on user-defined conversions to take up the
+slack.  The hope is that LEWG's
+proposed <a href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/p0262r0.html"><tt>status_value</tt></a>
+can serve this purpose, since it would make math functions look the same as
+other APIs being considered for inclusing in the Standard.
+
 
 <p>
-Code sensitive to errno could assign the return value to a
-<tt>status_value</tt> and then extract both the errno and
-the return value.
+To truly "feel" the same as current <tt>errno</tt>-using math functions,
+the <tt>status_value</tt> class would need to be extended with an implicit
+conversion to return its <tt>Value</tt>, which we'll suggest to LEWG. It was
+also suggested that floating-point math functions could store their error status
+using <tt>NaN</tt> bits, which the current <tt>status_value</tt> design forbids
+(it must be able to hold both a status <em>and</em> a value).
+
+<p>
+Code sensitive to <tt>errno</tt> could assign the return value to
+a <tt>status_value</tt> and then extract both the <tt>errno</tt> and the return
+value.
 
 <p>
 This approach allows <tt>errno</tt>-ignoring code to run safely in light-weight
@@ -181,61 +187,55 @@ is to use exceptions, which <tt>status_value</tt> also supports.
 
 <p>
 If adding an implicit convertion to <tt>status_value</tt> to return
-its <tt>Value</tt> proves infeasible, it is of course easy to create
-a return type solely for the use of the math library.
-The following fanciful code defines a new <tt>struct math_result</tt>
-for this purpose:
+its <tt>Value</tt> proves infeasible, it is of course easy to create a return
+type solely for the use of the math library.  We expect LEWG to provide guidance
+in this area. The following fanciful code defines a new <tt>class
+math_result</tt> for this purpose:
 
 <blockquote>
 <pre>
- 1 template&lt;typename T&gt; struct math_result {
- 2   errno_t e;
- 3   T val;
- 4   operator errno_t() const { return e; }
- 5   operator T() const { return val; }
- 6 };
- 7
- 8 namespace no_errno {
- 9   struct math_result&lt;float&gt; tgammaf(float x)
-10   {
-11     math_result&lt;float&gt; ret;
+ 1 namespace std {
+ 2 namespace experimental {
+ 3
+ 4 enum class math_error {
+ 5   divide_by_zero,
+ 6   inexact,
+ 7   overflow,
+ 8   underflow,
+ 9   invalid,
+10   // ...
+11 };
 12
-13     ret.val = tgammaf(x, &amp;ret.e);
-14     return ret;
-15   }
-16
-17   struct math_result&lt;double&gt; tgamma(double x)
-18   {
-19     math_result&lt;double&gt; ret;
-20
-21     ret.val = tgamma(x, &amp;ret.e);
-22     return ret;
-23   }
-24
-25   struct math_result&lt;long double&gt; lgammal(long double x)
-26   {
-27     math_result&lt;long double&gt; ret;
-28
-29     ret.val = lgammal(x, &amp;ret.e);
-30     return ret;
-31   }
+13 template <typename T>
+14 class math_result {
+15   math_error e;
+16   T val;
+17
+18  public:
+19   explicit operator math_error() const { return e; }
+20   operator T() const { return val; }
+21 };
+22
+23 math_result<float> tgamma(float x) {
+24   math_result<float> ret;
+25
+26   ret.val = tgammaf(x , &ret.e);
+27   return ret;
+28 }
+29
+30 math_result<double> tgamma(double x) {
+31   math_result<double> ret;
 32
-33   struct math_result&lt;long int&gt; lrintl(long double x)
-34   {
-35     math_result&lt;long int&gt; ret;
+33   ret.val = tgamma(x, &ret.e);
+34   return ret;
+35 }
 36
-37     ret.val = lrintl(x, &amp;ret.e);
-38     return ret;
-39   }
-40
-41   struct math_result&lt;long long int&gt; llrint(double x)
-42   {
-43     math_result&lt;long long int&gt; ret;
-44
-45     ret.val = llrint(x, &amp;ret.e);
-46     return ret;
-47   }
-48 }
+37 }  // namespace experimental
+38
+39 template <>
+40 struct is_error_code_enum<experimental::math_error> : std::true_type {};
+41
+42 }  // namespace std
 </pre>
 </blockquote>
 
@@ -255,20 +255,17 @@ in earlier versions of this paper that are now deprecated.
 <h3>Restricting Configuration</h3>
 
 <p>
-One approach is to require that
-<tt>math_errhandling &amp; MATH_ERREXCEPT</tt> be non-zero
-(as is required for IEC 60559) and that
-<tt>math_errhandling &amp; MATH_ERRNO</tt> be zero in all cases where
-math library functions are invoked from executors that do not provide TLS.
-Note that <tt>math_errhandling</tt> is global and constant, which means
-that it cannot have different values in different contexts of the same
-execution.
-However, this approach cannot be used in conjunction with existing code
-that invokes math functions and tests <tt>errno</tt>.
-This could in turn be dealt with by forbidding use of code
-that checks for math errors using <tt>errno</tt>, but this would have
-the undesirable effect of acting as a barrier to the adoption of
-light-weight executors.
+One approach is to require that <tt>math_errhandling &amp; MATH_ERREXCEPT</tt>
+be non-zero (as is required for IEC 60559) and that <tt>math_errhandling &amp;
+MATH_ERRNO</tt> be zero in all cases where math library functions are invoked
+from executors that do not provide TLS.  Note that <tt>math_errhandling</tt> is
+global and constant, which means that it cannot have different values in
+different contexts of the same execution.  However, this approach cannot be used
+in conjunction with existing code that invokes math functions and
+tests <tt>errno</tt>.  This could in turn be dealt with by forbidding use of
+code that checks for math errors using <tt>errno</tt>, but this would have the
+undesirable effect of acting as a barrier to the adoption of light-weight
+executors.  It also makes it difficults to check for math errors at all.
 
 <h3>Adding <tt>errno</tt> Parameter Via Function Overloading</h3>
 
