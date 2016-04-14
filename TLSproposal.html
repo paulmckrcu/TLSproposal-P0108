@@ -206,7 +206,7 @@ math_result</tt> for this purpose:
 10   // ...
 11 };
 12
-13 template <typename T>
+13 template &lt;typename T&gt;
 14 class math_result {
 15   math_error e;
 16   T val;
@@ -216,24 +216,24 @@ math_result</tt> for this purpose:
 20   operator T() const { return val; }
 21 };
 22
-23 math_result<float> tgamma(float x) {
-24   math_result<float> ret;
+23 math_result&lt;float&gt; tgamma(float x) {
+24   math_result&lt;float&gt; ret;
 25
-26   ret.val = tgammaf(x , &ret.e);
+26   ret.val = tgammaf(x , &amp;ret.e);
 27   return ret;
 28 }
 29
-30 math_result<double> tgamma(double x) {
-31   math_result<double> ret;
+30 math_result&lt;double&gt; tgamma(double x) {
+31   math_result&lt;double&gt; ret;
 32
-33   ret.val = tgamma(x, &ret.e);
+33   ret.val = tgamma(x, &amp;ret.e);
 34   return ret;
 35 }
 36
 37 }  // namespace experimental
 38
-39 template <>
-40 struct is_error_code_enum<experimental::math_error> : std::true_type {};
+39 template &lt;&gt;
+40 struct is_error_code_enum&lt;experimental::math_error&gt; : std::true_type {};
 41
 42 }  // namespace std
 </pre>
